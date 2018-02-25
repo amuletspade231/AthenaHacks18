@@ -9,6 +9,7 @@ using Windows.Foundation.Collections;
 using Windows.UI.Xaml;
 using Windows.UI.Core;
 using Windows.UI.Popups;
+using Windows.UI.Xaml.Shapes;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Data;
@@ -19,12 +20,14 @@ using Windows.Media.Capture;
 using Windows.ApplicationModel;
 using System.Threading.Tasks;
 using Windows.System.Display;
-using Windows.Graphics.Display;
-using Windows.Storage;
 using Windows.Storage.Streams;
-using Windows.Storage.FileProperties;
-using Windows.Graphics.Imaging;
+using Windows.Graphics.Display;
 using Windows.Media.MediaProperties;
+using Windows.Graphics.Imaging;
+using Windows.Media;
+using Microsoft.ProjectOxford.Face;
+using Microsoft.ProjectOxford.Face.Contract;
+using Microsoft.ProjectOxford.Common.Contract;
 
 
 // The Blank Page item template is documented at https://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
@@ -48,45 +51,6 @@ namespace CameraCapture
         }
 
         //-----------Helper Functions------------
-
-        private async Task CapturePhotoToFile()
-        {
-            mediaCapture = new MediaCapture();
-            await mediaCapture.InitializeAsync();
-            //mediaCapture.Failed += MediaCapture_Failed;
-
-            // Prepare and capture photo
-            var lowLagCapture = await mediaCapture.PrepareLowLagPhotoCaptureAsync(ImageEncodingProperties.CreateUncompressed(MediaPixelFormat.Bgra8));
-
-            var capturedPhoto = await lowLagCapture.CaptureAsync();
-            var softwareBitmap = capturedPhoto.Frame.SoftwareBitmap;
-
-            await lowLagCapture.FinishAsync();
-
-            StorageFolder destinationFolder =
-                await ApplicationData.Current.LocalFolder.CreateFolderAsync("ProfilePhotoFolder",
-                CreationCollisionOption.OpenIfExists);
-            
-            StorageFile file = await destinationFolder.CreateFileAsync("photo.jpg", CreationCollisionOption.GenerateUniqueName);
-
-            using (var captureStream = new InMemoryRandomAccessStream())
-            {
-                await mediaCapture.CapturePhotoToStreamAsync(ImageEncodingProperties.CreateJpeg(), captureStream);
-
-                using (var fileStream = await file.OpenAsync(FileAccessMode.ReadWrite))
-                {
-                    var decoder = await BitmapDecoder.CreateAsync(captureStream);
-                    var encoder = await BitmapEncoder.CreateForTranscodingAsync(fileStream, decoder);
-
-                    var properties = new BitmapPropertySet {
-            { "System.Photo.Orientation", new BitmapTypedValue(PhotoOrientation.Normal, PropertyType.UInt16) }
-        };
-                    await encoder.BitmapProperties.SetPropertiesAsync(properties);
-
-                    await encoder.FlushAsync();
-                }
-            }
-        }
 
         //Depending on your app's scenario, you may want to call this from the OnNavigatedTo event handler that is called when the page is loaded
         //or wait and launch the preview in response to UI events
@@ -137,10 +101,6 @@ namespace CameraCapture
             }
         }
 
-        //public delegate void MediaCaptureFailedEventHandler(MediaCapture sender, MediaCaptureFailedEventArgs errorEventArgs);
-        //public sealed class MediaCaptureFailedEventArgs : IMediaCaptureFailedEventArgs
-        //public event MediaCaptureFailedEventHandler Failed<>
-
         private async Task CleanupCameraAsync()
         {
             if (mediaCapture != null)
@@ -188,7 +148,39 @@ namespace CameraCapture
 
         private async void Button_Click(object sender, RoutedEventArgs e)
         {
-            await CapturePhotoToFile();
+            FaceServiceClient fClient = new FaceServiceClient("7fd36de2f576487aaad929010b131480", "https://westcentralus.api.cognitive.microsoft.com/face/v1.0");
+            
+            using (var captureStream = new InMemoryRandomAccessStream())
+            {
+                await mediaCapture.CapturePhotoToStreamAsync(ImageEncodingProperties.CreateJpeg(), captureStream);
+                captureStream.Seek(0);
+
+                var faces = await fClient.DetectAsync(captureStream.AsStream(), returnFaceLandmarks: true);
+
+                if (faces.Length > 0)
+                {
+                    // Prepare to draw rectangles around the faces.
+
+                    Face face = faces[0];
+                    var polygon1 = new Polygon();
+                    polygon1.Stroke = new SolidColorBrush(Windows.UI.Colors.Red);
+                    polygon1.StrokeThickness = 4;
+
+                    var points = new PointCollection();
+                    points.Add(new Windows.Foundation.Point(face.FaceRectangle.Left, face.FaceRectangle.Top));
+                    points.Add(new Windows.Foundation.Point(face.FaceRectangle.Left, face.FaceRectangle.Top + face.FaceRectangle.Height));
+                    points.Add(new Windows.Foundation.Point(face.FaceRectangle.Left + face.FaceRectangle.Width, face.FaceRectangle.Top + face.FaceRectangle.Height));
+                    points.Add(new Windows.Foundation.Point(face.FaceRectangle.Left + face.FaceRectangle.Width, face.FaceRectangle.Top));
+                    polygon1.Points = points;
+
+                    // When you create a XAML element in code, you have to add
+                    // it to the XAML visual tree. This example assumes you have
+                    // a panel named 'layoutRoot' in your XAML file, like this:
+                    // <Grid x:Name="layoutRoot>
+                    layoutRoot.Children.Add(polygon1);
+                }
+
+                };
         }
     }
 }
