@@ -4,8 +4,8 @@ from twilio.rest import Client
 from flask import Flask, request, redirect
 from twilio.twiml.messaging_response import MessagingResponse
 
-account_sid = "AC75325c6ca65ba0dc7e86b5b6a75eaf99"
-auth_token = "58d18c8197a684de3826a1487aebc95c"
+account_sid = "*****"
+auth_token = "*****"
 client = Client(account_sid, auth_token)
 
 rawData = requests.get()
